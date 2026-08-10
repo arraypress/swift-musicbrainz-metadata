@@ -92,13 +92,24 @@ public struct MBArtist: Sendable, Identifiable {
     /// Known aliases for the artist.
     public let aliases: [MBAlias]
 
-    /// The matching Discogs artist URL, cross-referenced from URL relations.
-    public let discogsURL: String?
+    /// Every external URL MusicBrainz holds for this artist.
+    ///
+    /// Streaming, purchase, official and database links, classified but with
+    /// ``MBExternalLink/relationType`` preserved verbatim. Use
+    /// ``Swift/Collection/streaming`` for listen links, or
+    /// ``Swift/Collection/url(for:)`` for one service.
+    ///
+    /// Populated at artist level in practice. Releases carry very few and
+    /// recordings essentially none — see ``MBExternalLink`` for why.
+    public let links: [MBExternalLink]
+
+    /// The matching Discogs URL, when there is one.
+    public var discogsURL: String? { links.url(for: .discogs) }
 
     public init(
         id: String, name: String, sortName: String, disambiguation: String?,
         type: String?, country: String?, gender: String?, lifeSpan: MBLifeSpan,
-        aliases: [MBAlias], discogsURL: String?
+        aliases: [MBAlias], links: [MBExternalLink]
     ) {
         self.id = id
         self.name = name
@@ -109,6 +120,6 @@ public struct MBArtist: Sendable, Identifiable {
         self.gender = gender
         self.lifeSpan = lifeSpan
         self.aliases = aliases
-        self.discogsURL = discogsURL
+        self.links = links
     }
 }

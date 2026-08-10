@@ -9,7 +9,8 @@ Every endpoint is **keyless** (no API token). Results cross-reference cleanly wi
 - 🎵 **Typed lookups** — release, artist, release group, recording, label by MBID
 - 🔎 **Search** — releases, artists, or release groups; paginated with a total `count`
 - 💿 **Rich releases** — artist credits, labels + catalogue numbers, and the full tracklist (media → tracks)
-- 🔗 **Discogs cross-reference** — `discogsURL` parsed from URL relations on releases, artists, release groups, and labels
+- 🔗 **External links** — every URL relation parsed and classified: Spotify, Apple Music, Tidal, Deezer, Bandcamp, SoundCloud, YouTube Music, plus Discogs and Wikidata
+- 🎧 **Discogs cross-reference** — `discogsURL` on releases, artists, release groups, and labels
 - 🔓 **Keyless** — no API token required
 - 🍎 **Cross-platform** — macOS, iOS, tvOS, watchOS · Swift 6 · async/await
 - 🛡️ **Typed error handling**

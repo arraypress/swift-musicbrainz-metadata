@@ -65,6 +65,101 @@ final class MusicBrainzMetadataTests: XCTestCase {
         XCTAssertEqual(artist.discogsURL, "https://www.discogs.com/artist/125246")
     }
 
+    // MARK: - External links
+
+    func testAllRelationsSurviveNotJustDiscogs() throws {
+        // The defect this replaced: `inc=url-rels` was requested, the response
+        // carried every link, and only Discogs was parsed out.
+        let artist = MusicBrainzParser.artist(try json(Fixture.artist))
+        XCTAssertEqual(artist.links.count, 11, "one relation has no URL target and is skipped")
+        XCTAssertEqual(artist.discogsURL, "https://www.discogs.com/artist/125246")
+    }
+
+    func testStreamingServicesAreRecognisedByHost() throws {
+        let links = MusicBrainzParser.artist(try json(Fixture.artist)).links
+        XCTAssertEqual(links.spotifyURL, "https://open.spotify.com/artist/6olE6TJLqED3rqDCT0FyPh")
+        XCTAssertEqual(links.appleMusicURL, "https://music.apple.com/gb/artist/112018")
+        XCTAssertEqual(links.tidalURL, "https://tidal.com/artist/16928")
+        XCTAssertEqual(links.deezerURL, "https://www.deezer.com/artist/604")
+        XCTAssertEqual(links.youtubeMusicURL, "https://music.youtube.com/channel/UCJ6QMrpAHNfMGjnCbnzWvEA")
+    }
+
+    func testAppleMusicIsFoundUnderEitherRelationType() throws {
+        // MusicBrainz files it as both "streaming" and "purchase for download".
+        // Matching on host rather than relation type is what makes it findable.
+        let links = MusicBrainzParser.artist(try json(Fixture.artist)).links
+        let apple = links.filter { $0.service == .appleMusic }
+        XCTAssertEqual(apple.count, 1, "the duplicate URL is collapsed")
+        XCTAssertEqual(apple.first?.relationType, "streaming")
+    }
+
+    func testStreamingCollectionExcludesPurchaseOnlyServices() throws {
+        let links = MusicBrainzParser.artist(try json(Fixture.artist)).links
+        let hosts = Set(links.streaming.compactMap { $0.service })
+        XCTAssertTrue(hosts.contains(.spotify))
+        XCTAssertTrue(hosts.contains(.appleMusic))
+        XCTAssertFalse(hosts.contains(.beatport), "Beatport is a shop, not a streaming service")
+        XCTAssertFalse(hosts.contains(.discogs))
+    }
+
+    func testCategoriesSortRelationTypes() throws {
+        let links = MusicBrainzParser.artist(try json(Fixture.artist)).links
+        XCTAssertEqual(links.category(.social).first?.url, "https://twitter.com/nirvana")
+        XCTAssertEqual(links.category(.official).first?.url, "https://www.nirvana.com/")
+        XCTAssertTrue(links.category(.database).contains { $0.service == .wikidata })
+        XCTAssertTrue(links.category(.purchase).contains { $0.service == .beatport })
+    }
+
+    func testRelationTypeIsPreservedVerbatim() throws {
+        // The vocabulary grows; a caller who knows MusicBrainz should not be
+        // limited to the categories modelled here.
+        let links = MusicBrainzParser.artist(try json(Fixture.artist)).links
+        XCTAssertTrue(links.contains { $0.relationType == "free streaming" })
+        XCTAssertTrue(links.contains { $0.relationType == "purchase for download" })
+    }
+
+    func testRelationsWithoutAURLAreSkipped() throws {
+        // Artist-to-artist relations have no `url` object at all.
+        let links = MusicBrainzParser.artist(try json(Fixture.artist)).links
+        XCTAssertFalse(links.contains { $0.url.isEmpty })
+    }
+
+    func testUnknownHostsStillProduceALink() {
+        let link = MBExternalLink(
+            url: "https://obscure.example.com/x",
+            relationType: "free streaming",
+            service: MBService.matching(host: "obscure.example.com"),
+            category: MBExternalLink.category(for: "free streaming")
+        )
+        XCTAssertNil(link.service)
+        XCTAssertEqual(link.category, .streaming, "an unrecognised host is still a streaming link")
+    }
+
+    func testRegionalHostsResolve() {
+        // Found live: us.napster.com was missed by a table holding only
+        // play.napster.com, and Apple/Amazon vary the host per country.
+        XCTAssertEqual(MBService.matching(host: "us.napster.com"), .napster)
+        XCTAssertEqual(MBService.matching(host: "play.napster.com"), .napster)
+        XCTAssertEqual(MBService.matching(host: "music.amazon.co.uk"), .amazonMusic)
+        XCTAssertEqual(MBService.matching(host: "music.amazon.de"), .amazonMusic)
+        XCTAssertEqual(MBService.matching(host: "listen.tidal.com"), .tidal)
+        XCTAssertEqual(MBService.matching(host: "music.yandex.ru"), .yandexMusic)
+    }
+
+    func testHostMatchingIsNotSubstringLoose() {
+        // A `contains` check would have matched these; suffix matching does not.
+        XCTAssertNil(MBService.matching(host: "nottidal.com.example.org"))
+        XCTAssertNil(MBService.matching(host: "spotify.com.phishing.example"))
+    }
+
+    func testNestedHostsResolveToTheMoreSpecificService() {
+        XCTAssertEqual(MBService.matching(host: "music.youtube.com"), .youtubeMusic)
+        XCTAssertEqual(MBService.matching(host: "www.youtube.com"), .youtube)
+        XCTAssertEqual(MBService.matching(host: "music.apple.com"), .appleMusic)
+        XCTAssertEqual(MBService.matching(host: "itunes.apple.com"), .iTunes)
+        XCTAssertEqual(MBService.matching(host: "radiohead.bandcamp.com"), .bandcamp)
+    }
+
     // MARK: - Release group parsing
 
     func testParseReleaseGroup() throws {
@@ -197,6 +292,11 @@ final class MusicBrainzMetadataTests: XCTestCase {
         XCTAssertEqual(artist.name, "Nirvana")
         XCTAssertNotNil(artist.discogsURL)
 
+        // The whole point of the change: streaming links reach the caller.
+        XCTAssertGreaterThan(artist.links.count, 10, "url-rels are being dropped again")
+        XCTAssertFalse(artist.links.streaming.isEmpty, "no streaming links survived parsing")
+        XCTAssertNotNil(artist.links.spotifyURL)
+
         if printOut {
             print("=== live search ===")
             for hit in search.results.prefix(3) {
@@ -208,6 +308,10 @@ final class MusicBrainzMetadataTests: XCTestCase {
             print("Discogs: \(release.discogsURL ?? "—")")
             print("=== live artist lookup ===")
             print("\(artist.name) [\(artist.type ?? "?")] \(artist.lifeSpan.begin ?? "?")–\(artist.lifeSpan.end ?? "") · Discogs: \(artist.discogsURL ?? "—")")
+            print("=== live streaming links (\(artist.links.count) relations total) ===")
+            for link in artist.links.streaming {
+                print("• \(link.service.map(\.rawValue) ?? "?")  [\(link.relationType)]  \(link.url)")
+            }
         }
     }
 
@@ -267,7 +371,18 @@ private enum Fixture {
       ],
       "relations": [
         { "type": "allmusic", "target-type": "url", "url": { "resource": "https://www.allmusic.com/artist/mn0000357270" } },
-        { "type": "discogs", "target-type": "url", "url": { "id": "81846eca-af41-43d0-bcae-b62dbf5cfa2f", "resource": "https://www.discogs.com/artist/125246" } }
+        { "type": "discogs", "target-type": "url", "url": { "id": "81846eca-af41-43d0-bcae-b62dbf5cfa2f", "resource": "https://www.discogs.com/artist/125246" } },
+        { "type": "free streaming", "target-type": "url", "url": { "resource": "https://open.spotify.com/artist/6olE6TJLqED3rqDCT0FyPh" } },
+        { "type": "free streaming", "target-type": "url", "url": { "resource": "https://www.deezer.com/artist/604" } },
+        { "type": "streaming", "target-type": "url", "url": { "resource": "https://music.apple.com/gb/artist/112018" } },
+        { "type": "streaming", "target-type": "url", "url": { "resource": "https://tidal.com/artist/16928" } },
+        { "type": "purchase for download", "target-type": "url", "url": { "resource": "https://music.apple.com/gb/artist/112018" } },
+        { "type": "purchase for download", "target-type": "url", "url": { "resource": "https://www.beatport.com/artist/nirvana/12345" } },
+        { "type": "youtube music", "target-type": "url", "url": { "resource": "https://music.youtube.com/channel/UCJ6QMrpAHNfMGjnCbnzWvEA" } },
+        { "type": "social network", "target-type": "url", "url": { "resource": "https://twitter.com/nirvana" } },
+        { "type": "official homepage", "target-type": "url", "url": { "resource": "https://www.nirvana.com/" } },
+        { "type": "wikidata", "target-type": "url", "url": { "resource": "https://www.wikidata.org/wiki/Q11649" } },
+        { "type": "artist", "target-type": "artist", "artist": { "id": "no-url-here", "name": "Kurt Cobain" } }
       ]
     }
     """

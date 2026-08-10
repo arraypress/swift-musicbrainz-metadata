@@ -44,13 +44,24 @@ public struct MBLabel: Sendable, Identifiable {
     /// The label's active period.
     public let lifeSpan: MBLifeSpan
 
-    /// The matching Discogs label URL, cross-referenced from URL relations.
-    public let discogsURL: String?
+    /// Every external URL MusicBrainz holds for this label.
+    ///
+    /// Streaming, purchase, official and database links, classified but with
+    /// ``MBExternalLink/relationType`` preserved verbatim. Use
+    /// ``Swift/Collection/streaming`` for listen links, or
+    /// ``Swift/Collection/url(for:)`` for one service.
+    ///
+    /// Populated at artist level in practice. Releases carry very few and
+    /// recordings essentially none — see ``MBExternalLink`` for why.
+    public let links: [MBExternalLink]
+
+    /// The matching Discogs URL, when there is one.
+    public var discogsURL: String? { links.url(for: .discogs) }
 
     public init(
         id: String, name: String, sortName: String?, disambiguation: String?,
         type: String?, country: String?, labelCode: Int?, area: String?,
-        lifeSpan: MBLifeSpan, discogsURL: String?
+        lifeSpan: MBLifeSpan, links: [MBExternalLink]
     ) {
         self.id = id
         self.name = name
@@ -61,6 +72,6 @@ public struct MBLabel: Sendable, Identifiable {
         self.labelCode = labelCode
         self.area = area
         self.lifeSpan = lifeSpan
-        self.discogsURL = discogsURL
+        self.links = links
     }
 }

@@ -137,8 +137,19 @@ public struct MBRelease: Sendable, Identifiable {
     /// The media (discs) that make up the release, each with its tracklist.
     public let media: [MBMedium]
 
-    /// The matching Discogs release URL, cross-referenced from URL relations.
-    public let discogsURL: String?
+    /// Every external URL MusicBrainz holds for this release.
+    ///
+    /// Streaming, purchase, official and database links, classified but with
+    /// ``MBExternalLink/relationType`` preserved verbatim. Use
+    /// ``Swift/Collection/streaming`` for listen links, or
+    /// ``Swift/Collection/url(for:)`` for one service.
+    ///
+    /// Populated at artist level in practice. Releases carry very few and
+    /// recordings essentially none — see ``MBExternalLink`` for why.
+    public let links: [MBExternalLink]
+
+    /// The matching Discogs URL, when there is one.
+    public var discogsURL: String? { links.url(for: .discogs) }
 
     /// The credited artists flattened for display (e.g. `"Queen & David Bowie"`).
     public var artistName: String { MBArtistCredit.combined(artistCredits) }
@@ -152,7 +163,7 @@ public struct MBRelease: Sendable, Identifiable {
     public init(
         id: String, title: String, disambiguation: String?, artistCredits: [MBArtistCredit],
         date: String?, country: String?, barcode: String?, status: String?, packaging: String?,
-        labels: [MBLabelInfo], media: [MBMedium], discogsURL: String?
+        labels: [MBLabelInfo], media: [MBMedium], links: [MBExternalLink]
     ) {
         self.id = id
         self.title = title
@@ -165,6 +176,6 @@ public struct MBRelease: Sendable, Identifiable {
         self.packaging = packaging
         self.labels = labels
         self.media = media
-        self.discogsURL = discogsURL
+        self.links = links
     }
 }

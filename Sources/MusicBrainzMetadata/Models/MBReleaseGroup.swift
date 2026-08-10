@@ -41,8 +41,19 @@ public struct MBReleaseGroup: Sendable, Identifiable {
     /// The ordered artist credits.
     public let artistCredits: [MBArtistCredit]
 
-    /// The matching Discogs master URL, cross-referenced from URL relations.
-    public let discogsURL: String?
+    /// Every external URL MusicBrainz holds for this release group.
+    ///
+    /// Streaming, purchase, official and database links, classified but with
+    /// ``MBExternalLink/relationType`` preserved verbatim. Use
+    /// ``Swift/Collection/streaming`` for listen links, or
+    /// ``Swift/Collection/url(for:)`` for one service.
+    ///
+    /// Populated at artist level in practice. Releases carry very few and
+    /// recordings essentially none — see ``MBExternalLink`` for why.
+    public let links: [MBExternalLink]
+
+    /// The matching Discogs URL, when there is one.
+    public var discogsURL: String? { links.url(for: .discogs) }
 
     /// The credited artists flattened for display.
     public var artistName: String { MBArtistCredit.combined(artistCredits) }
@@ -50,7 +61,7 @@ public struct MBReleaseGroup: Sendable, Identifiable {
     public init(
         id: String, title: String, disambiguation: String?, primaryType: String?,
         secondaryTypes: [String], firstReleaseDate: String?,
-        artistCredits: [MBArtistCredit], discogsURL: String?
+        artistCredits: [MBArtistCredit], links: [MBExternalLink]
     ) {
         self.id = id
         self.title = title
@@ -59,6 +70,6 @@ public struct MBReleaseGroup: Sendable, Identifiable {
         self.secondaryTypes = secondaryTypes
         self.firstReleaseDate = firstReleaseDate
         self.artistCredits = artistCredits
-        self.discogsURL = discogsURL
+        self.links = links
     }
 }

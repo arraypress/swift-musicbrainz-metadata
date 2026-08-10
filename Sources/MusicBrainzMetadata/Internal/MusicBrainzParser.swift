@@ -25,7 +25,7 @@ enum MusicBrainzParser {
             packaging: nonEmpty(d["packaging"]),
             labels: labelInfos(d["label-info"]),
             media: (d["media"] as? [[String: Any]] ?? []).map(medium),
-            discogsURL: discogsURL(d["relations"])
+            links: links(d["relations"])
         )
     }
 
@@ -76,7 +76,7 @@ enum MusicBrainzParser {
             gender: nonEmpty(d["gender"]),
             lifeSpan: lifeSpan(d["life-span"]),
             aliases: aliases(d["aliases"]),
-            discogsURL: discogsURL(d["relations"])
+            links: links(d["relations"])
         )
     }
 
@@ -104,7 +104,7 @@ enum MusicBrainzParser {
             secondaryTypes: stringArray(d["secondary-types"]),
             firstReleaseDate: nonEmpty(d["first-release-date"]),
             artistCredits: artistCredits(d["artist-credit"]),
-            discogsURL: discogsURL(d["relations"])
+            links: links(d["relations"])
         )
     }
 
@@ -119,7 +119,7 @@ enum MusicBrainzParser {
             firstReleaseDate: nonEmpty(d["first-release-date"]),
             video: d["video"] as? Bool ?? false,
             artistCredits: artistCredits(d["artist-credit"]),
-            discogsURL: discogsURL(d["relations"])
+            links: links(d["relations"])
         )
     }
 
@@ -136,7 +136,7 @@ enum MusicBrainzParser {
             labelCode: intValue(d["label-code"]),
             area: (d["area"] as? [String: Any])?["name"] as? String,
             lifeSpan: lifeSpan(d["life-span"]),
-            discogsURL: discogsURL(d["relations"])
+            links: links(d["relations"])
         )
     }
 
@@ -195,15 +195,39 @@ enum MusicBrainzParser {
         )
     }
 
-    /// Extracts the Discogs URL from a `relations` array (`type == "discogs"`).
-    private static func discogsURL(_ value: Any?) -> String? {
-        guard let relations = value as? [[String: Any]] else { return nil }
-        for relation in relations where (relation["type"] as? String) == "discogs" {
-            if let url = relation["url"] as? [String: Any], let resource = url["resource"] as? String {
-                return resource
-            }
+    /// Parses a `relations` array into typed external links.
+    ///
+    /// Every relation is kept, not just Discogs. The response already carries
+    /// them — Radiohead's artist record has 57 — and discarding the other 56
+    /// was throwing away the Spotify, Apple Music and Tidal links the caller
+    /// paid for over the wire.
+    ///
+    /// Relations without a URL target (artist-to-artist credits, for instance)
+    /// are skipped rather than emitted with an empty string.
+    private static func links(_ value: Any?) -> [MBExternalLink] {
+        guard let relations = value as? [[String: Any]] else { return [] }
+
+        var seen = Set<String>()
+        return relations.compactMap { relation in
+            guard let target = relation["url"] as? [String: Any],
+                  let resource = target["resource"] as? String,
+                  !resource.isEmpty,
+                  seen.insert(resource).inserted
+            else { return nil }
+
+            let type = relation["type"] as? String ?? ""
+            return MBExternalLink(
+                url: resource,
+                relationType: type,
+                service: host(of: resource).flatMap(MBService.matching(host:)),
+                category: MBExternalLink.category(for: type)
+            )
         }
-        return nil
+    }
+
+    /// The host of a URL, tolerating the malformed entries MusicBrainz holds.
+    private static func host(of urlString: String) -> String? {
+        URLComponents(string: urlString)?.host
     }
 
     // MARK: - Helpers
