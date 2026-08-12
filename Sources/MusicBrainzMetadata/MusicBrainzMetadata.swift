@@ -58,10 +58,24 @@ public enum MusicBrainzMetadata {
         /// URL); the default identifies this library.
         public var userAgent: String
 
+        /// How many times to try again after a 503.
+        ///
+        /// MusicBrainz meters against a bucket shared by everyone — the
+        /// `x-ratelimit-remaining` header rises and falls with other people's
+        /// traffic, not just yours — so a 503 arrives regardless of how well a
+        /// single client paces itself. Retrying is the difference between a
+        /// tool that works and one that fails a few times an hour for reasons
+        /// its caller cannot see or influence.
+        ///
+        /// Set to zero to fail on the first 503.
+        public var retryLimit: Int
+
         public init(
-            userAgent: String = "swift-musicbrainz-metadata/1.0 (https://github.com/arraypress)"
+            userAgent: String = "swift-musicbrainz-metadata/1.0 (https://github.com/arraypress)",
+            retryLimit: Int = 2
         ) {
             self.userAgent = userAgent
+            self.retryLimit = retryLimit
         }
 
         /// Reads `MUSICBRAINZ_USER_AGENT` from the environment, falling back to the
@@ -97,7 +111,9 @@ public enum MusicBrainzMetadata {
         configuration: Configuration = .default
     ) async throws -> MBSearchResults {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw MusicBrainzMetadataError.invalidInput }
+        guard !trimmed.isEmpty else {
+            throw MusicBrainzMetadataError.invalidInput("the query is empty")
+        }
 
         let items = [
             URLQueryItem(name: "query", value: trimmed),
@@ -181,7 +197,9 @@ public enum MusicBrainzMetadata {
     ) async throws -> [String: Any] {
         let trimmed = mbid.trimmingCharacters(in: .whitespacesAndNewlines)
         guard UUID(uuidString: trimmed) != nil else {
-            throw MusicBrainzMetadataError.invalidInput
+            throw MusicBrainzMetadataError.invalidInput(
+                "\"\(mbid)\" is not an MBID — those are UUIDs, e.g. 5b11f4ce-a62d-471e-81fc-a69a8278c7da"
+            )
         }
         let items = [URLQueryItem(name: "inc", value: inc)]
         return try await MusicBrainzClient.get(

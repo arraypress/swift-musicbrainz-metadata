@@ -18,8 +18,10 @@ Every endpoint is **keyless** (no API token). Results cross-reference cleanly wi
 ## API notes
 
 - MusicBrainz **requires a descriptive `User-Agent`**; requests without one are rejected with `503`. A default identifying this library is provided and can be overridden in `Configuration` (or via the `MUSICBRAINZ_USER_AGENT` environment variable).
-- The service **rate-limits to roughly one request per second** — pace your calls to avoid `MusicBrainzMetadataError.rateLimited`.
-- MBIDs are UUIDs (e.g. `5b11f4ce-a62d-471e-81fc-a69a8278c7da`).
+- **A `503` is retried twice by default.** MusicBrainz meters against a bucket shared by every caller — `x-ratelimit-remaining` rises and falls with other people's traffic — so a `503` arrives even when you are pacing correctly, and its body says so: *"The MusicBrainz web server is currently busy. Please try again later."* `Retry-After` is honoured when sent. Set `Configuration.retryLimit` to `0` to fail on the first one.
+- Still pace your own calls to roughly **one request per second**. The retry covers the unavoidable; it is not a licence to hammer.
+- `400` and `404` mean different things and are reported differently: `invalidInput` is a request MusicBrainz could not parse, `notFound` is a record that does not exist. The all-zero UUID is a `400`, not a `404`.
+- MBIDs are UUIDs (e.g. `5b11f4ce-a62d-471e-81fc-a69a8278c7da`), and a non-UUID is rejected before anything is sent.
 
 ## Usage
 
@@ -52,7 +54,7 @@ let recording = try await MusicBrainzMetadata.recording("5fb524f1-8cc8-4c04-a921
 let label = try await MusicBrainzMetadata.label("68803e28-86fe-4a95-985f-8e493795ab31")
 
 // Custom User-Agent (recommended — identify your app + a contact URL)
-let config = MusicBrainzMetadata.Configuration(userAgent: "MyApp/1.0 (https://example.com)")
+let config = MusicBrainzMetadata.Configuration(userAgent: "MyApp/1.0 (https://example.com)", retryLimit: 2)
 let byConfig = try await MusicBrainzMetadata.artist("5b11f4ce-a62d-471e-81fc-a69a8278c7da", configuration: config)
 ```
 
