@@ -30,9 +30,7 @@ public struct MBTrack: Sendable, Equatable, Identifiable {
 
     /// The track length formatted as `m:ss`, if known.
     public var lengthFormatted: String? {
-        guard let length else { return nil }
-        let totalSeconds = length / 1000
-        return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
+        return length.map { Formatting.trackLength(ms: $0) }
     }
 
     public init(id: String, title: String, number: String, position: Int, length: Int?, recordingID: String?) {
